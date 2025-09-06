@@ -1,0 +1,21 @@
+{
+    "include": [
+      "src/pydto"
+    ],
+    "exclude": [
+      "**/__pycache__",
+      "**/.venv",
+      ".venv"
+    ],
+    "ignore": [],
+    "defineConstant": {
+      "DEBUG": true
+    },
+    "reportMissingImports": true,
+    "reportMissingTypeStubs": false,
+    "reportOptionalSubscript": true,
+    "reportPrivateImportUsage": "warning",
+    "reportUnnecessaryTypeIgnoreComment": true,
+    "typeCheckingMode": "strict",
+    "useLibraryCodeForTypes": true
+  }
