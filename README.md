@@ -8,10 +8,10 @@ Helper for creating DTO models from Pydantic v2 models, inspired by TypeScript u
 - Type-safe, compatible with Pydantic v2
 - Simple decorator API
 
-## Installation
+## Installation UV
 
 ```bash
-pip install pydto
+"pydto @ git+https://github.com/kostia-tarnashynskyi/pydto.git",
 ```
 
 ## Usage
