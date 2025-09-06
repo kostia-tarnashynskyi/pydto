@@ -1,42 +1,102 @@
-from pydantic import create_model
+from typing import TypeVar, cast
+
+from pydantic import BaseModel, ConfigDict, create_model
+
+T = TypeVar("T", bound=BaseModel)
 
 
-def dto(
+def dto_model(
     partial: bool = False,
     pick_fields: list[str] | None = None,
     omit_fields: list[str] | None = None,
     rename_fields: dict[str, str] | None = None,
-    config: dict | None = None,
+    config: ConfigDict | None = None,
+    model_name: str | None = None
 ):
-    def decorator(cls):
-        # Create a new dictionary to hold the fields for the new model
-        fields = {}
-        for field_name, model_field in cls.model_fields.items():
-            if pick_fields and field_name not in pick_fields:
-                continue
-            if omit_fields and field_name in omit_fields:
-                continue
-            new_field_name = (
-                rename_fields.get(field_name, field_name)
-                if rename_fields
-                else field_name
-            )
-            fields[new_field_name] = (model_field.annotation, model_field.default)
+    """ Pydantic v2 DTO decorator: Pick, Omit, Rename, Partial, Config
+    Args:
+        pick_fields: list of fields to include (if None — all fields)
+        omit_fields: list of fields to exclude
+        rename_fields: {old: new field name}
+        partial: if True, all fields become Optional
+        config: ConfigDict for model configuration
+        model_name: name of the new model
 
-        # If partial is True, make all fields optional
-        if partial:
-            for field_name in fields:
-                annotation, default = fields[field_name]
-                default = None  # Make field optional
-                fields[field_name] = (annotation | None, default)
+    Returns:
+        New Pydantic model type
+    """
 
-        # Create a new Pydantic model with the modified fields
-        new_model = create_model(cls.__name__, __base__=cls, **fields)
+    pick_fields = pick_fields or []
+    omit_fields = omit_fields or []
+    rename_fields = rename_fields or {}
 
-        # Apply additional config if provided
+    def decorator(cls: type[T]) -> type[T]:
+        base_fields = cls.model_fields
+
+        # if pick is None, get all fields
+        field_names = pick_fields or list(base_fields.keys())
+
+        # Remove omitted fields
+        field_names = [f for f in field_names if f not in omit_fields]
+
+        dto_fields: dict[str, tuple] = {}
+        for orig_name in field_names:
+            if orig_name not in base_fields:
+                raise ValueError(f"Field '{orig_name}' not in base model {cls.__name__}")
+            dto_field = base_fields[orig_name]
+
+            # Rename field if needed
+            new_name = rename_fields.get(orig_name, orig_name)
+
+            annotation = dto_field.annotation
+            default = dto_field.default if dto_field.default is not None else ...
+            if partial:
+                annotation = annotation | None
+                default = None
+            dto_fields[new_name] = (annotation, default)
+
+        # Define model name, default decorated class name
+        dto_cls_name = model_name or cls.__name__
+
+        # Pydantic v2 create_model
+        new_dto_model = create_model(
+            dto_cls_name,
+            **dto_fields
+        )
         if config:
-            new_model.Config = type("Config", (), config)
-
-        return new_model
+            new_dto_model.model_config = config
+        return cast(type[T], new_dto_model)
 
     return decorator
+
+
+def create_dto_model(
+    base_model: type[T],
+    partial: bool = False,
+    pick_fields: list[str] | None = None,
+    omit_fields: list[str] | None = None,
+    rename_fields: dict[str, str] | None = None,
+    config: ConfigDict | None = None,
+    model_name: str | None = None
+) -> type[T]:
+    """ Pydantic v2 DTO factory function: Pick, Omit, Rename, Partial, Config
+    Args:
+        base_model: Base Pydantic model class
+        pick_fields: list of fields to include (if None — all fields)
+        omit_fields: list of fields to exclude
+        rename_fields: {old: new field name}
+        partial: if True, all fields become Optional
+        config: ConfigDict for model configuration
+        model_name: name of the new model
+
+    Returns:
+        New Pydantic model type
+    """
+    return dto_model(
+        partial=partial,
+        pick_fields=pick_fields,
+        omit_fields=omit_fields,
+        rename_fields=rename_fields,
+        config=config,
+        model_name=model_name
+    )(base_model)

@@ -1,71 +1,132 @@
-from pydantic import BaseModel, Field
-from pydto.pydantic_v2 import dto
+import pytest
+from pydantic import BaseModel, ConfigDict
+
+from src.pydto.pydantic_v2 import create_dto_model, dto_model
 
 
-def test_dto_pydantic_v2():
-    class BaseEntityExample(BaseModel):
-        id: str = Field(...)
-        name: str = Field(...)
-        description: str | None = None
+def test_dto_model_pick_fields():
+    class Base(BaseModel):
+        a: int
+        b: str
+        c: float
 
-        class Config:
-            from_attributes = True
-
-        def get_projection_fields(self) -> list[str]:
-            return list(self.model_fields.keys())
-
-    @dto(
-        partial=True,
-        pick_fields=["id", "name", "description"],
-        omit_fields=[],
-        rename_fields={},
-        config={
-            "from_attributes": False,
-            "json_schema_extra": {
-                "example": {
-                    "id": "entity_123",
-                    "name": "Sample Entity",
-                    "description": "This is a sample entity for demonstration purposes.",
-                }
-            },
-        },
-    )
-    class PartialEntity(BaseEntityExample):
+    @dto_model(pick_fields=["a", "c"])
+    class DTO(Base):
         ...
 
-    # Create an instance of PartialEntity
-    entity = PartialEntity(id="entity_123", name="Sample Entity", description="Demo")
+    assert set(DTO.model_fields.keys()) == {"a", "c"}
 
-    # Print the instance
-    print(entity)
+def test_dto_model_omit_fields():
+    class Base(BaseModel):
+        x: int
+        y: str
+        z: float
 
-    # Assert field values
-    assert entity.id == "entity_123"
-    assert entity.name == "Sample Entity"
-    assert entity.description == "Demo"
-    #
-    # # Assert all fields are optional (partial=True)
-    assert PartialEntity.model_fields["id"].annotation == (str | None)
-    assert PartialEntity.model_fields["name"].annotation == (str | None)
-    assert PartialEntity.model_fields["description"].annotation == (str | None)
-    assert ["id", "name", "description"] == list(PartialEntity.model_fields.keys())
+    @dto_model(omit_fields=["y"])
+    class DTO(Base):
+        ...
 
-    entity2 = PartialEntity()
-    print(entity2)
-    assert entity2.id is None
-    assert entity2.name is None
-    assert entity2.description is None
-    #
-    # # Check config
-    assert hasattr(PartialEntity.Config, "from_attributes")
-    assert PartialEntity.Config.from_attributes is False
-    #
-    # # Check example in config
-    example = getattr(PartialEntity.Config, "json_schema_extra", {}).get("example")
-    assert example["id"] == "entity_123"
-    assert example["name"] == "Sample Entity"
-    assert (
-        example["description"] == "This is a sample entity for demonstration purposes."
-    )
+    assert set(DTO.model_fields.keys()) == {"x", "z"}
 
-    print("All assertions passed.")
+def test_dto_model_rename_fields():
+    class Base(BaseModel):
+        foo: int
+        bar: str
+
+    @dto_model(rename_fields={"foo": "baz"})
+    class DTO(Base):
+        ...
+
+    assert "baz" in DTO.model_fields
+    assert "foo" not in DTO.model_fields
+
+def test_dto_model_partial_fields():
+    class Base(BaseModel):
+        id: int
+        name: str
+
+    @dto_model(partial=True)
+    class DTO(Base):
+        ...
+
+    assert DTO.model_fields["id"].annotation == (int | None)
+    assert DTO.model_fields["name"].annotation == (str | None)
+    dto = DTO()
+    assert dto.id is None
+    assert dto.name is None
+
+def test_dto_model_config_dict():
+    class Base(BaseModel):
+        id: int
+
+    config = ConfigDict(title="CustomDTO")
+    @dto_model(config=config)
+    class DTO(Base):
+        ...
+
+    assert DTO.model_config["title"] == "CustomDTO"
+
+def test_dto_model_error_on_missing_field():
+    class Base(BaseModel):
+        id: int
+
+    with pytest.raises(ValueError):
+        @dto_model(pick_fields=["missing"])
+        class DTO(Base):
+            ...
+
+
+# Tests for create_dto_model function
+def test_create_dto_model_pick_fields():
+    class Base(BaseModel):
+        a: int
+        b: str
+        c: float
+
+    DTO = create_dto_model(Base, pick_fields=["a", "c"])
+    assert set(DTO.model_fields.keys()) == {"a", "c"}
+
+def test_create_dto_model_omit_fields():
+    class Base(BaseModel):
+        x: int
+        y: str
+        z: float
+
+    DTO = create_dto_model(Base, omit_fields=["y"])
+    assert set(DTO.model_fields.keys()) == {"x", "z"}
+
+def test_create_dto_model_rename_fields():
+    class Base(BaseModel):
+        foo: int
+        bar: str
+
+    DTO = create_dto_model(Base, rename_fields={"foo": "baz"})
+    assert "baz" in DTO.model_fields
+    assert "foo" not in DTO.model_fields
+
+def test_create_dto_model_partial_fields():
+    class Base(BaseModel):
+        id: int
+        name: str
+
+    DTO = create_dto_model(Base, partial=True)
+    assert DTO.model_fields["id"].annotation == (int | None)
+    assert DTO.model_fields["name"].annotation == (str | None)
+    dto = DTO()
+    assert dto.id is None
+    assert dto.name is None
+
+def test_create_dto_model_config_dict():
+    class Base(BaseModel):
+        id: int
+
+    config = ConfigDict(title="CustomDTO")
+    DTO = create_dto_model(Base, config=config)
+    assert DTO.model_config["title"] == "CustomDTO"
+
+def test_create_dto_model_error_on_missing_field():
+    class Base(BaseModel):
+        id: int
+
+    with pytest.raises(ValueError):
+        create_dto_model(Base, pick_fields=["missing"])
